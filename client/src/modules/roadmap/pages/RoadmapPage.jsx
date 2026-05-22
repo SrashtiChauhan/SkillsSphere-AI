@@ -110,7 +110,6 @@ const RoadmapPage = () => {
             const isCompleted = topic.status === "completed";
             const isLeft = index % 2 === 0;
             const isContribution = topic.type === "contribution";
-            
             const completedBorderColor = isContribution ? 'bg-amber-500 border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]' : 'bg-primary border-primary shadow-[0_0_15px_rgba(99,102,241,0.5)]';
             const cardBorderCompleted = isContribution ? 'border-amber-500/30' : 'border-primary/30';
             const cardHoverBorder = isContribution ? 'hover:border-amber-500/50' : 'hover:border-primary/50';
@@ -126,13 +125,16 @@ const RoadmapPage = () => {
 
                 {/* Content Card */}
                 <div className={`w-full md:w-1/2 ${isLeft ? "md:pr-16" : "md:pl-16"}`}>
-                  <div className={`group p-6 bg-[var(--surface)] border ${isCompleted ? cardBorderCompleted : 'border-[var(--border)]'} rounded-[2rem] ${cardHoverBorder} transition-all hover:bg-[var(--surface-hover)] shadow-lg relative overflow-hidden`}>
+                  <div className={`group p-6 bg-[var(--surface)] border ${isCompleted ? cardBorderCompleted : (isContribution ? 'border-amber-500/20' : 'border-[var(--border)]')} rounded-[2rem] ${cardHoverBorder} transition-all hover:bg-[var(--surface-hover)] shadow-lg relative overflow-hidden`}>
                     
                     {/* Background Glow */}
                     {isCompleted && <div className={`absolute -top-12 -right-12 w-24 h-24 ${glowColor} rounded-full blur-[40px] pointer-events-none`}></div>}
 
                     <div className="flex items-start justify-between mb-4">
-                       <span className={`text-[10px] font-black uppercase tracking-widest ${isContribution ? 'text-amber-500' : 'text-[var(--text-muted)]'}`}>{index + 1}. {isContribution ? 'Contribution' : 'Milestone'}</span>
+                       <span className={`text-[10px] font-black uppercase tracking-widest ${isContribution ? 'text-amber-500' : 'text-[var(--text-muted)]'} flex items-center gap-1`}>
+                         {isContribution ? <Star className="w-3 h-3" /> : null}
+                         {index + 1}. {isContribution ? "Contribution" : "Milestone"}
+                       </span>
                        <div className="flex items-center gap-1.5">
                          {topic.isVerified && (
                            <div className="px-2 py-1 bg-indigo-500/10 text-indigo-400 rounded-lg text-[8px] font-black uppercase tracking-tighter border border-indigo-500/20 flex items-center gap-1 animate-pulse">
@@ -151,7 +153,7 @@ const RoadmapPage = () => {
                        </div>
                     </div>
 
-                    <h3 className={`text-xl font-bold text-[var(--text-main)] mb-4 transition-colors ${isContribution ? 'group-hover:text-amber-500' : 'group-hover:text-primary'}`}>
+                     <h3 className={`text-xl font-bold text-[var(--text-main)] mb-4 transition-colors ${isContribution ? 'group-hover:text-amber-500' : 'group-hover:text-primary'}`}>
                       {topic.topicName}
                     </h3>
 
