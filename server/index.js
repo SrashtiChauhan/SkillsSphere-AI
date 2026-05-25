@@ -70,7 +70,10 @@ io.use(async (socket, next) => {
 
 setIO(io);
 
-app.use(cors());
+app.use(cors({
+  origin: ALLOWED_ORIGINS,
+  credentials: true,
+}));
 app.use(express.json());
 
 // Security headers
@@ -80,7 +83,7 @@ app.use((req, res, next) => {
   next();
 });
 
-await connectRedis();
+connectRedis();
 connectDB();
 logEvaluatorConfig();
 

@@ -1,4 +1,26 @@
 import ClassroomSession from "../../database/models/ClassroomSession.js";
+import { executeCode } from "../../utils/codeExecutor.js";
+
+const roomStates = new Map();
+
+function getOrCreateRoomState(roomId) {
+  if (!roomStates.has(roomId)) {
+    roomStates.set(roomId, {
+      chatHistory: [],
+      code: "",
+      whiteboard: []
+    });
+  }
+  return roomStates.get(roomId);
+}
+
+export function clearRoomState(roomId) {
+  roomStates.delete(roomId);
+}
+
+export function getRoomState(roomId) {
+  return roomStates.get(roomId);
+}
 
 export function initClassroomSockets(io) {
   io.on("connection", (socket) => {
@@ -75,6 +97,10 @@ export function initClassroomSockets(io) {
 
         // Send the current participants list to the person who just joined
         socket.emit("room-participants", participants);
+
+        // Sync the current room state (chat, code, whiteboard)
+        const state = getOrCreateRoomState(roomId);
+        socket.emit("sync-state", state);
       } catch (error) {
         console.error("Error joining classroom room:", error);
         socket.emit("error", { message: "Internal server error during join" });
@@ -92,11 +118,19 @@ export function initClassroomSockets(io) {
         return;
       }
 
-      socket.to(roomId).emit("chat-message", {
+      const msgObj = {
         sender: socket.data.user,
         message,
         timestamp: new Date().toISOString(),
-      });
+      };
+
+      const state = getOrCreateRoomState(roomId);
+      state.chatHistory.push(msgObj);
+      if (state.chatHistory.length > 100) {
+        state.chatHistory.shift();
+      }
+
+      socket.to(roomId).emit("chat-message", msgObj);
     });
 
     // Toggle Hand Raise
@@ -118,12 +152,13 @@ export function initClassroomSockets(io) {
 
     // WebRTC Signaling Events
     socket.on("webrtc-offer", ({ targetSocketId, offer }) => {
-      // Validate that both sockets exist and are in the same room
+      // Validate that the requesting socket is in a room
       if (!socket.data || !socket.data.roomId) {
         socket.emit("unauthorized", { message: "You must join a room first" });
         return;
       }
 
+      // Validate that the target socket exists and is in the same room
       const targetSocket = io.sockets.sockets.get(targetSocketId);
       if (
         !targetSocket ||
@@ -178,10 +213,15 @@ export function initClassroomSockets(io) {
         });
         return;
       }
-      socket.to(roomId).emit("draw-stroke", {
+      const payload = {
         strokeData,
         sender: socket.data.user,
-      });
+      };
+
+      const state = getOrCreateRoomState(roomId);
+      state.whiteboard.push(payload);
+
+      socket.to(roomId).emit("draw-stroke", payload);
     });
 
     // Clear canvas event
@@ -192,6 +232,8 @@ export function initClassroomSockets(io) {
         });
         return;
       }
+      const state = getOrCreateRoomState(roomId);
+      state.whiteboard = [];
       socket.to(roomId).emit("clear-canvas");
     });
 
@@ -203,6 +245,8 @@ export function initClassroomSockets(io) {
         });
         return;
       }
+      const state = getOrCreateRoomState(roomId);
+      state.code = code;
       socket.to(roomId).emit("code-change", { code });
     });
 
@@ -217,6 +261,31 @@ export function initClassroomSockets(io) {
       socket.to(roomId).emit("code-cursor", {
         cursorPosition,
         senderId: socket.id,
+        senderName: socket.data.user?.name || "Participant",
+      });
+    });
+
+    // Execute code event
+    socket.on("execute-code-request", async ({ roomId, code, language }) => {
+      if (!socket.data || socket.data.roomId !== roomId) {
+        socket.emit("unauthorized", {
+          message: "Cross-classroom action detected",
+        });
+        return;
+      }
+
+      // Broadcast that execution has started
+      io.to(roomId).emit("execution-started", {
+        senderName: socket.data.user?.name || "Participant",
+      });
+
+      // Execute code via API
+      const result = await executeCode(language, code);
+
+      // Broadcast result
+      io.to(roomId).emit("execution-result", {
+        output: result.output,
+        isError: result.isError,
         senderName: socket.data.user?.name || "Participant",
       });
     });
