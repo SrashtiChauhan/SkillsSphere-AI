@@ -18,6 +18,10 @@ export function clearRoomState(roomId) {
   roomStates.delete(roomId);
 }
 
+export function getRoomState(roomId) {
+  return roomStates.get(roomId);
+}
+
 export function initClassroomSockets(io) {
   io.on("connection", (socket) => {
     console.log(`Socket connected: ${socket.id}`);
