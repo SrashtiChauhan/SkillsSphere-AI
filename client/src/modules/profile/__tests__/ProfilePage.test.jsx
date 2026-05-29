@@ -68,7 +68,15 @@ describe("ProfilePage avatar upload", () => {
     fileService.getSignedFileUrl.mockResolvedValue("https://cdn.example.com/avatar.png");
     profileService.uploadAvatar.mockResolvedValue({
       success: true,
-      user: { ...baseUser, profilePic: "avatars/avatar.png" },
+      user: {
+        ...baseUser,
+        profilePic: "https://res.cloudinary.com/demo/image/upload/v1/avatar.png",
+        profilePicPublicId: "skillssphere/avatars/avatar",
+      },
+    });
+    profileService.removeAvatar.mockResolvedValue({
+      success: true,
+      user: { ...baseUser, profilePic: null, profilePicPublicId: null },
     });
   });
 
@@ -83,6 +91,12 @@ describe("ProfilePage avatar upload", () => {
 
   it("shows an uploaded image preview immediately", async () => {
     const user = userEvent.setup();
+    let resolveUpload;
+    profileService.uploadAvatar.mockReturnValue(
+      new Promise((resolve) => {
+        resolveUpload = resolve;
+      }),
+    );
     renderProfile();
 
     await act(async () => {
@@ -93,7 +107,17 @@ describe("ProfilePage avatar upload", () => {
       "src",
       "blob:avatar-1",
     );
-    expect(screen.getByRole("button", { name: /save photo/i })).toBeInTheDocument();
+    expect(profileService.uploadAvatar).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "avatar.png", type: "image/png" }),
+      "test-token",
+    );
+
+    await act(async () => {
+      resolveUpload({
+        success: true,
+        user: { ...baseUser, profilePic: "https://res.cloudinary.com/demo/image/upload/v1/avatar.png" },
+      });
+    });
   });
 
   it("rejects unsupported file types", async () => {
@@ -111,10 +135,24 @@ describe("ProfilePage avatar upload", () => {
       "Please upload a PNG, JPG, JPEG, or WEBP image.",
     );
     expect(profileService.uploadAvatar).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /save photo/i })).not.toBeInTheDocument();
   });
 
-  it("handles upload loading state", async () => {
+  it("rejects files larger than 5MB", async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await act(async () => {
+      await user.upload(
+        screen.getByLabelText(/upload profile image/i),
+        imageFile("large.jpg", "image/jpeg", 5 * 1024 * 1024 + 1),
+      );
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Profile image must be 5MB or smaller.");
+    expect(profileService.uploadAvatar).not.toHaveBeenCalled();
+  });
+
+  it("handles upload loading state and disables controls", async () => {
     const user = userEvent.setup();
     let resolveUpload;
     profileService.uploadAvatar.mockReturnValue(
@@ -128,28 +166,56 @@ describe("ProfilePage avatar upload", () => {
     await act(async () => {
       await user.upload(screen.getByLabelText(/upload profile image/i), imageFile());
     });
-    const saveButton = screen.getByRole("button", { name: /save photo/i });
-    await act(async () => {
-      await user.click(saveButton);
-    });
 
-    expect(await screen.findByRole("button", { name: /uploading/i })).toBeDisabled();
+    expect(screen.getByLabelText(/upload profile image/i)).toBeDisabled();
     expect(screen.getAllByText(/uploading/i).length).toBeGreaterThan(0);
 
     await act(async () => {
       resolveUpload({
         success: true,
-        user: { ...baseUser, profilePic: "avatars/avatar.png" },
+        user: { ...baseUser, profilePic: "https://res.cloudinary.com/demo/image/upload/v1/avatar.png" },
       });
     });
 
     await waitFor(() => {
-      expect(screen.queryByRole("button", { name: /uploading/i })).not.toBeInTheDocument();
+      expect(screen.getByLabelText(/upload profile image/i)).not.toBeDisabled();
     });
+  });
+
+  it("updates the avatar image URL after a successful upload", async () => {
+    const user = userEvent.setup();
+    renderProfile();
+
+    await act(async () => {
+      await user.upload(screen.getByLabelText(/upload profile image/i), imageFile());
+    });
+
+    expect(await screen.findByAltText(/aarav sharma profile avatar/i)).toHaveAttribute(
+      "src",
+      "https://res.cloudinary.com/demo/image/upload/v1/avatar.png",
+    );
+  });
+
+  it("shows a friendly alert when upload fails", async () => {
+    const user = userEvent.setup();
+    profileService.uploadAvatar.mockRejectedValue(new Error("Unable to upload avatar right now."));
+    renderProfile();
+
+    await act(async () => {
+      await user.upload(screen.getByLabelText(/upload profile image/i), imageFile());
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to upload avatar right now.");
   });
 
   it("loads an existing avatar and replaces it with a new preview", async () => {
     const user = userEvent.setup();
+    let resolveUpload;
+    profileService.uploadAvatar.mockReturnValue(
+      new Promise((resolve) => {
+        resolveUpload = resolve;
+      }),
+    );
     renderProfile({ ...baseUser, profilePic: "avatars/existing.png" });
 
     expect(await screen.findByAltText(/aarav sharma profile avatar/i)).toHaveAttribute(
@@ -166,15 +232,36 @@ describe("ProfilePage avatar upload", () => {
       "blob:avatar-1",
     );
 
-    await act(async () => {
-      await user.click(screen.getByRole("button", { name: /save photo/i }));
-    });
-
     await waitFor(() => {
       expect(profileService.uploadAvatar).toHaveBeenCalledWith(
         expect.objectContaining({ name: "new.webp", type: "image/webp" }),
         "test-token",
       );
     });
+
+    await act(async () => {
+      resolveUpload({
+        success: true,
+        user: { ...baseUser, profilePic: "https://res.cloudinary.com/demo/image/upload/v1/avatar.png" },
+      });
+    });
+  });
+
+  it("removes an avatar and returns to the default initials fallback", async () => {
+    const user = userEvent.setup();
+    renderProfile({
+      ...baseUser,
+      profilePic: "https://res.cloudinary.com/demo/image/upload/v1/existing.png",
+      profilePicPublicId: "skillssphere/avatars/existing",
+    });
+
+    expect(screen.getByAltText(/aarav sharma profile avatar/i)).toBeInTheDocument();
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: /remove profile photo/i }));
+    });
+
+    expect(profileService.removeAvatar).toHaveBeenCalledWith("test-token");
+    expect(await screen.findByLabelText(/aarav sharma default avatar/i)).toBeInTheDocument();
   });
 });

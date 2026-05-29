@@ -105,7 +105,6 @@ const DeleteModal = ({ onConfirm, onCancel, loading }) => (
 const AvatarEditor = ({ user, roleConfig, onUpload, onRemove, uploading, avatarSrc }) => {
   const fileRef = useRef(null);
   const [preview, setPreview] = useState(null);
-  const [pendingFile, setPendingFile] = useState(null);
   const [justSaved, setJustSaved] = useState(false);
   const [validationError, setValidationError] = useState("");
 
@@ -117,19 +116,17 @@ const AvatarEditor = ({ user, roleConfig, onUpload, onRemove, uploading, avatarS
     };
   }, [preview]);
 
-  const handleFile = (file) => {
+  const handleFile = async (file) => {
     if (!file) return;
     if (!AVATAR_FILE_TYPES.includes(file.type)) {
       setValidationError("Please upload a PNG, JPG, JPEG, or WEBP image.");
       setPreview(null);
-      setPendingFile(null);
       return;
     }
 
     if (file.size > AVATAR_MAX_SIZE) {
       setValidationError("Profile image must be 5MB or smaller.");
       setPreview(null);
-      setPendingFile(null);
       return;
     }
 
@@ -137,34 +134,21 @@ const AvatarEditor = ({ user, roleConfig, onUpload, onRemove, uploading, avatarS
       URL.revokeObjectURL(preview);
     }
 
-    setPreview(URL.createObjectURL(file));
-    setPendingFile(file);
+    const nextPreview = URL.createObjectURL(file);
+    setPreview(nextPreview);
     setValidationError("");
     setJustSaved(false);
-  };
 
-  const handleSavePhoto = async () => {
-    if (!pendingFile) return;
-    const uploaded = await onUpload(pendingFile);
-    if (!uploaded) return;
-    setPendingFile(null);
+    const uploaded = await onUpload(file);
     setPreview(null);
-    setJustSaved(true);
-    setTimeout(() => setJustSaved(false), 3000);
-  };
-
-  const clearPendingPhoto = () => {
-    if (preview?.startsWith("blob:")) {
-      URL.revokeObjectURL(preview);
+    if (uploaded) {
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 3000);
     }
-    setPreview(null);
-    setPendingFile(null);
-    setValidationError("");
   };
 
   const displayPic = preview || avatarSrc;
   const initials = getInitials(user.name || "");
-  const hasPending = Boolean(pendingFile);
   const inputId = "profile-avatar-upload";
 
   return (
@@ -184,7 +168,7 @@ const AvatarEditor = ({ user, roleConfig, onUpload, onRemove, uploading, avatarS
             <span className="text-[11px] font-semibold">Uploading...</span>
           </div>
         )}
-        {!uploading && !hasPending && !justSaved && (
+        {!uploading && !justSaved && (
           <label
             htmlFor={inputId}
             className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1 cursor-pointer"
@@ -193,11 +177,11 @@ const AvatarEditor = ({ user, roleConfig, onUpload, onRemove, uploading, avatarS
             <span className="text-white text-[10px] font-semibold">{displayPic ? "Change" : "Upload"}</span>
           </label>
         )}
-        {displayPic && !hasPending && !uploading && !justSaved && onRemove && (
+        {displayPic && !uploading && !justSaved && onRemove && (
           <button
             type="button"
             aria-label="Remove profile photo"
-            onClick={() => { clearPendingPhoto(); onRemove(); }}
+            onClick={onRemove}
             className="absolute -top-1 -right-1 w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center shadow-md z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
           >
             <X size={11} />
@@ -216,53 +200,21 @@ const AvatarEditor = ({ user, roleConfig, onUpload, onRemove, uploading, avatarS
           disabled={uploading}
           onChange={(e) => { handleFile(e.target.files[0]); e.target.value = ""; }}
         />
-        {!hasPending && (
-          <label
-            htmlFor={inputId}
-            aria-disabled={uploading}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2 dark:focus-within:ring-offset-slate-900 ${
-              uploading
-                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
-                : "cursor-pointer border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
-            }`}
-          >
-            <Upload size={12} aria-hidden="true" />
-            {displayPic ? "Change photo" : "Upload photo"}
-          </label>
-        )}
+        <label
+          htmlFor={inputId}
+          aria-disabled={uploading}
+          className={`inline-flex items-center justify-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors focus-within:outline-none focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2 dark:focus-within:ring-offset-slate-900 ${
+            uploading
+              ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500"
+              : "cursor-pointer border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300 dark:hover:bg-indigo-500/20"
+          }`}
+        >
+          <Upload size={12} aria-hidden="true" />
+          {displayPic ? "Change photo" : "Upload photo"}
+        </label>
       </div>
 
-      {hasPending && (
-        <div className="flex flex-col gap-2 mt-1 sm:flex-row">
-          <button
-            type="button"
-            onClick={handleSavePhoto}
-            disabled={uploading}
-            aria-busy={uploading}
-            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-500 hover:bg-emerald-600 text-white disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
-          >
-            {uploading ? (
-              <>
-                <span className="h-3 w-3 rounded-full border-2 border-white border-t-transparent animate-spin" aria-hidden="true" />
-                Uploading...
-              </>
-            ) : (
-              <>
-                <Check size={12} aria-hidden="true" /> Save photo
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={clearPendingPhoto}
-            disabled={uploading}
-            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-white/10 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900"
-          >
-            <X size={12} aria-hidden="true" /> Cancel
-          </button>
-        </div>
-      )}
-      {!hasPending && !uploading && justSaved && (
+      {!uploading && justSaved && (
         <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
           <BadgeCheck size={13} /> Saved!
         </span>
@@ -328,21 +280,16 @@ const ProfilePage = () => {
   const handleAvatarUpload = async (file) => {
     setAvatarUploading(true);
     setAvatarError("");
-    const blobUrl = URL.createObjectURL(file);
-    setAvatarSrc(blobUrl);
-    dispatch(updateUserProfile({ ...user, profilePic: blobUrl }));
     try {
       const response = await uploadAvatar(file, token);
       dispatch(updateUserProfile(response.user));
+      setAvatarSrc(response.user?.profilePic ?? null);
       return true;
     } catch (err) {
-      dispatch(updateUserProfile({ ...user, profilePic: user.profilePic ?? null }));
-      setAvatarSrc(avatarSrc);
       setAvatarError(err.message || "Failed to upload photo");
       return false;
     } finally {
       setAvatarUploading(false);
-      URL.revokeObjectURL(blobUrl);
     }
   };
 
@@ -352,6 +299,7 @@ const ProfilePage = () => {
     try {
       const response = await removeAvatar(token);
       dispatch(updateUserProfile(response.user));
+      setAvatarSrc(null);
     } catch (err) {
       setAvatarError(err.message || "Failed to remove photo");
     } finally {
@@ -482,7 +430,11 @@ const ProfilePage = () => {
                 uploading={avatarUploading}
                 avatarSrc={avatarSrc}
               />
-              {avatarError && <p className="mt-2 text-xs text-red-500 dark:text-red-400">{avatarError}</p>}
+              {avatarError && (
+                <p className="mt-2 text-xs text-red-500 dark:text-red-400" role="alert">
+                  {avatarError}
+                </p>
+              )}
               
               <div className="text-center mt-3 w-full">
                 <h1 className="text-lg font-bold text-slate-900 dark:text-white truncate">{user.name}</h1>
